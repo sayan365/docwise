@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx backend.ts",
+    "dev": "tsx local-server.ts",
     "build:client": "vite build",
-    "build": "vite build && esbuild backend.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/backend.cjs",
-    "start": "node dist/backend.cjs",
+    "build": "vite build && esbuild local-server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/local-server.cjs",
+    "start": "node dist/local-server.cjs",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit"
