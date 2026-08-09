@@ -1,5 +1,5 @@
 {
-  "name": "JargonBuster",
+  "name": "DocWise",
   "description": "AI document scanner that translates legal and technical jargon into plain English with risk analysis.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

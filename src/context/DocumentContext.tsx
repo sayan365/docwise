@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { DocumentItem, ActiveTab, DocCategory, ChatMessage } from '../types';
+import { DocumentItem, ActiveTab, DocCategory, ChatMessage, RedFlag } from '../types';
 import { SAMPLE_DOCUMENTS } from '../data/samples';
 import { loadStoredDocuments, storeDocuments } from '../data/documentStorage';
+import { getLanguage, type LanguageCode } from '../data/languages';
 
 interface DocumentContextType {
   documents: DocumentItem[];
@@ -14,15 +15,19 @@ interface DocumentContextType {
   searchQuery: string;
   filterCategory: string;
   isDataReady: boolean;
+  selectedLanguage: LanguageCode;
+  translatingDocId: string | null;
   setActiveDocId: (id: string | null) => void;
   setActiveTab: (tab: ActiveTab) => void;
   setSearchQuery: (query: string) => void;
   setFilterCategory: (category: string) => void;
   toggleDarkMode: () => void;
+  setSelectedLanguage: (language: LanguageCode) => void;
   scanSample: (sampleId: string) => Promise<string>;
   scanDocumentText: (title: string, text: string, category?: DocCategory) => Promise<string>;
   scanDocumentFile: (file: File) => Promise<string>;
   askQuestion: (docId: string, question: string) => Promise<void>;
+  translateDocument: (docId: string) => Promise<void>;
   deleteDocument: (id: string) => void;
   resetSampleData: () => void;
   clearDocuments: () => void;
@@ -39,6 +44,7 @@ const INITIAL_DOCUMENTS: DocumentItem[] = SAMPLE_DOCUMENTS.map((sample) => ({
   verdict: sample.sampleAnalysis.verdict,
   overallRisk: sample.sampleAnalysis.overallRisk,
   sourceText: sample.rawText,
+  analysisLanguage: 'en-IN',
   takeaways: sample.sampleAnalysis.takeaways,
   redFlags: sample.sampleAnalysis.redFlags,
   redFlagsCount: sample.sampleAnalysis.redFlags.length,
@@ -68,6 +74,10 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>(() =>
+    getLanguage(localStorage.getItem('jargonbuster-language') || 'en-IN').code
+  );
+  const [translatingDocId, setTranslatingDocId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +113,12 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem('jargonbuster-active-tab', activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('jargonbuster-language', selectedLanguage);
+    document.documentElement.lang = selectedLanguage;
+    document.documentElement.dir = selectedLanguage === 'ur-IN' ? 'rtl' : 'ltr';
+  }, [selectedLanguage]);
 
   // Toggle dark mode class on HTML document
   useEffect(() => {
@@ -143,6 +159,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           fileData,
           mimeType,
           fileName: title,
+          outputLanguage: getLanguage(selectedLanguage),
         }),
       });
 
@@ -182,6 +199,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             [flag.title, flag.explanation, flag.sourceClause].filter(Boolean)
           ),
         ].filter(Boolean).join('\n'),
+        analysisLanguage: selectedLanguage,
         takeaways: data.takeaways || ['No specific key takeaways detected.'],
         redFlags: (data.redFlags || []).map((rf: any, index: number) => ({
           id: `rf-${newDocId}-${index}`,
@@ -330,6 +348,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             redFlags: targetDoc.redFlags,
             analysisContext: targetDoc.analysisContext,
           },
+          outputLanguage: getLanguage(selectedLanguage),
           question,
           conversationHistory: targetDoc.chatThread,
         }),
@@ -405,6 +424,54 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const translateDocument = async (docId: string) => {
+    const targetDoc = documents.find((document) => document.id === docId);
+    if (!targetDoc || targetDoc.analysisLanguage === selectedLanguage) return;
+    setTranslatingDocId(docId);
+
+    try {
+      const response = await fetch('/api/translate-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          outputLanguage: getLanguage(selectedLanguage),
+          analysis: {
+            title: targetDoc.title,
+            verdict: targetDoc.verdict,
+            takeaways: targetDoc.takeaways,
+            redFlags: targetDoc.redFlags,
+            documentContext: targetDoc.analysisContext,
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Translation failed');
+      }
+
+      setDocuments((currentDocuments) => currentDocuments.map((document) => {
+        if (document.id !== docId) return document;
+        const translatedFlags = (result.data.redFlags || []).map((flag: RedFlag, index: number) => ({
+          ...flag,
+          id: document.redFlags[index]?.id || `rf-${document.id}-${index}`,
+          sourceClause: document.redFlags[index]?.sourceClause || flag.sourceClause,
+        }));
+        return {
+          ...document,
+          title: result.data.title || document.title,
+          verdict: result.data.verdict || document.verdict,
+          takeaways: result.data.takeaways || document.takeaways,
+          redFlags: translatedFlags,
+          redFlagsCount: translatedFlags.length,
+          analysisContext: result.data.documentContext || document.analysisContext,
+          analysisLanguage: selectedLanguage,
+        };
+      }));
+    } finally {
+      setTranslatingDocId(null);
+    }
+  };
+
   const deleteDocument = (id: string) => {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
     if (activeDocId === id) {
@@ -441,15 +508,19 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         searchQuery,
         filterCategory,
         isDataReady,
+        selectedLanguage,
+        translatingDocId,
         setActiveDocId,
         setActiveTab,
         setSearchQuery,
         setFilterCategory,
         toggleDarkMode,
+        setSelectedLanguage,
         scanSample,
         scanDocumentText,
         scanDocumentFile,
         askQuestion,
+        translateDocument,
         deleteDocument,
         resetSampleData,
         clearDocuments,

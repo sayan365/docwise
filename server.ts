@@ -33,6 +33,21 @@ function pcmToWavBase64(base64Pcm: string, sampleRate = 24000) {
   return wav.toString("base64");
 }
 
+async function withGeminiRetry<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      const retryable = error?.status === 429 || error?.status === 503;
+      if (!retryable || attempt === attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 700 * 2 ** attempt));
+    }
+  }
+  throw lastError;
+}
+
 // Helper to get GoogleGenAI instance safely
 function getAI() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -51,13 +66,14 @@ function getAI() {
 
 // API Health Check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "JargonBuster" });
+  res.json({ status: "ok", service: "DocWise" });
 });
 
 // API: Analyze Document
 app.post("/api/analyze-document", async (req, res) => {
   try {
-    const { text, fileData, mimeType, fileName } = req.body;
+    const { text, fileData, mimeType, fileName, outputLanguage } = req.body;
+    const languageName = outputLanguage?.name || "English";
 
     if (!text && !fileData) {
       return res.status(400).json({ error: "Document text or file is required" });
@@ -78,22 +94,24 @@ app.post("/api/analyze-document", async (req, res) => {
 
     const promptText = `
 Analyze the following document or document excerpt for legal, contractual, or financial jargon.
-Translate complex legal language into plain English, highlight key takeaways, and flag any potentially risky or restrictive clauses (red flags).
+Translate complex language into clear, everyday language, highlight key takeaways, and flag any potentially risky or restrictive clauses (red flags).
 
 File Name: ${fileName || "Uploaded Document"}
 ${text ? `Document Text:\n"""\n${text}\n"""` : ""}
 
-Please provide a concise document title, classify into a category (Contracts, Leases, Insurance, Financial), give a clear 1-line verdict, an overall risk level ('clear', 'warning', or 'high'), a list of 3-5 plain-English key takeaways, and a list of red flags with titles, plain-English explanations, severity ('high', 'medium', or 'low'), and the exact or approximate source clause snippet from the document.
+Please provide a concise document title, classify into a category (Contracts, Leases, Insurance, Financial), give a clear 1-line verdict, an overall risk level ('clear', 'warning', or 'high'), a list of 3-5 everyday-language key takeaways, and a list of red flags with titles, clear explanations, severity ('high', 'medium', or 'low'), and the exact or approximate source clause snippet from the document.
+
+Write the title, verdict, takeaways, red-flag titles, explanations, and documentContext in ${languageName}. Keep category, overallRisk, and severity enum values in English exactly as specified. Preserve every sourceClause in its original document language; do not translate quotations. Preserve names, dates, section numbers, and monetary amounts exactly.
 `;
 
     parts.push({ text: promptText });
 
-    const response = await ai.models.generateContent({
+    const response = await withGeminiRetry(() => ai.models.generateContent({
       model: "gemini-3.6-flash",
       contents: { parts },
       config: {
         systemInstruction:
-          "You are a plain-English legal and contract explainer called JargonBuster. Given raw document text or uploaded document files, analyze the document and return strict JSON with a title, category, verdict, overallRisk, takeaways array, and redFlags array. Never include extra prose outside the JSON.",
+          `You are a careful document explainer called DocWise. Analyze the supplied document and return strict JSON in ${languageName}, except for fixed enum values and original source quotations. Never include extra prose outside the JSON.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -153,7 +171,7 @@ Please provide a concise document title, classify into a category (Contracts, Le
           required: ["title", "category", "verdict", "overallRisk", "takeaways", "redFlags", "documentContext"],
         },
       },
-    });
+    }));
 
     const jsonText = response.text ? response.text.trim() : "";
     let analysis;
@@ -173,6 +191,54 @@ Please provide a concise document title, classify into a category (Contracts, Le
   }
 });
 
+app.post("/api/translate-analysis", async (req, res) => {
+  try {
+    const { analysis, outputLanguage } = req.body;
+    if (!analysis || !outputLanguage?.name) {
+      return res.status(400).json({ error: "Analysis and output language are required" });
+    }
+
+    const ai = getAI();
+    const response = await withGeminiRetry(() => ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: `Translate this existing document analysis into ${outputLanguage.name}. Translate title, verdict, takeaways, red-flag titles and explanations, and documentContext. Keep severity values in English. Preserve every sourceClause exactly in its original language. Preserve names, dates, monetary amounts, and section numbers. Return no facts that are not present in the input.\n\n${JSON.stringify(analysis)}`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            verdict: { type: Type.STRING },
+            takeaways: { type: Type.ARRAY, items: { type: Type.STRING } },
+            redFlags: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  explanation: { type: Type.STRING },
+                  severity: { type: Type.STRING },
+                  sourceClause: { type: Type.STRING },
+                },
+                required: ["title", "explanation", "severity", "sourceClause"],
+              },
+            },
+            documentContext: { type: Type.STRING },
+          },
+          required: ["title", "verdict", "takeaways", "redFlags", "documentContext"],
+        },
+      },
+    }));
+
+    return res.json({ success: true, data: JSON.parse(response.text || "{}") });
+  } catch (error: any) {
+    console.error("Error translating analysis:", error);
+    return res.status(error?.status === 503 ? 503 : 500).json({
+      error: error?.status === 503 ? "The translation service is busy. Please try again shortly." : error.message || "Translation failed",
+    });
+  }
+});
+
 // API: Ask Questions about Document
 app.post("/api/ask-document", async (req, res) => {
   try {
@@ -184,7 +250,9 @@ app.post("/api/ask-document", async (req, res) => {
       documentAnalysis,
       question,
       conversationHistory,
+      outputLanguage,
     } = req.body;
+    const languageName = outputLanguage?.name || "English";
 
     if (!question) {
       return res.status(400).json({ error: "Question is required" });
@@ -195,7 +263,7 @@ app.post("/api/ask-document", async (req, res) => {
     const historyPrompt = Array.isArray(conversationHistory)
       ? conversationHistory
           .map((m: any, index: number) =>
-            `[Message ${index + 1} — ${m.role === "user" ? "User" : "JargonBuster"}]\n${m.text}`
+            `[Message ${index + 1} — ${m.role === "user" ? "User" : "DocWise"}]\n${m.text}`
           )
           .join("\n")
       : "";
@@ -215,7 +283,8 @@ ${historyPrompt || "No previous messages."}
 CURRENT USER QUESTION
 ${question}
 
-Answer the current question in plain English using the original document, saved analysis, and all relevant prior messages. Resolve references such as “it”, “that clause”, and “the previous point” from the conversation history. Do not claim the document is missing when an original file is attached. Never treat placeholder text such as “Document file scanned” as document content. If the document truly does not contain the answer, say exactly what is absent.
+Answer the current question in clear, everyday language using the original document, saved analysis, and all relevant prior messages. Resolve references such as “it”, “that clause”, and “the previous point” from the conversation history. Do not claim the document is missing when an original file is attached. Never treat placeholder text such as “Document file scanned” as document content. If the document truly does not contain the answer, say exactly what is absent.
+Write the answer and highlightChips in ${languageName}, regardless of the language used in the question. Keep sourceQuote in the original document language and preserve names, dates, amounts, and section numbers exactly.
 Return a structured JSON object containing:
 - "answer": plain English response explaining the answer clearly.
 - "highlightChips": string array of 1-3 short key highlights or warnings (e.g. ["Requires 60-day notice", "Penalty applies"]).
@@ -228,12 +297,12 @@ Return a structured JSON object containing:
     }
     parts.push({ text: promptText });
 
-    const response = await ai.models.generateContent({
+    const response = await withGeminiRetry(() => ai.models.generateContent({
       model: "gemini-3.6-flash",
       contents: { parts },
       config: {
         systemInstruction:
-          "You are JargonBuster, a careful document explainer. Maintain continuity across the complete supplied conversation and ground every factual claim in the supplied document or saved analysis. Return strict JSON with answer, highlightChips array, and optional sourceQuote.",
+          `You are DocWise, a careful document explainer. Maintain continuity across the complete supplied conversation, ground every factual claim in the supplied document or saved analysis, and respond in ${languageName}. Return strict JSON with answer, highlightChips array, and optional sourceQuote.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -255,7 +324,7 @@ Return a structured JSON object containing:
           required: ["answer", "highlightChips"],
         },
       },
-    });
+    }));
 
     const jsonText = response.text ? response.text.trim() : "";
     let data;
@@ -280,24 +349,37 @@ Return a structured JSON object containing:
 // API: Text-to-Speech audio walkthrough
 app.post("/api/tts", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, outputLanguage } = req.body;
     if (!text) {
       return res.status(400).json({ error: "Text is required for TTS" });
     }
 
     const ai = getAI();
-    const response = await ai.models.generateContent({
+    const languageName = outputLanguage?.name || "English";
+    const languageCode = outputLanguage?.code || "en-IN";
+    let speechText = text;
+
+    if (languageCode !== "en-IN") {
+      const translation = await withGeminiRetry(() => ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Translate the following document summary into ${languageName}. Preserve names, dates, monetary amounts, and section numbers exactly. Return only the translation, with no introduction:\n\n${text}`,
+      }));
+      speechText = translation.text?.trim() || text;
+    }
+
+    const response = await withGeminiRetry(() => ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: `Explain clearly in a warm, professional voice: ${text}` }] }],
+      contents: [{ parts: [{ text: `Speak this ${languageName} document summary clearly in a warm, professional voice. Read only the summary:\n${speechText}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
+          languageCode,
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName: "Kore" },
           },
         },
       },
-    });
+    }));
 
     const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     const base64Audio = audioData?.data;
@@ -337,7 +419,7 @@ async function start() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`JargonBuster server listening on http://0.0.0.0:${PORT}`);
+    console.log(`DocWise server listening on http://0.0.0.0:${PORT}`);
   });
 }
 

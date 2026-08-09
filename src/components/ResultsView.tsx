@@ -16,16 +16,19 @@ import {
   Scale,
   Share2,
   ArrowLeft,
+  RefreshCw,
 } from 'lucide-react';
 import { useDocumentContext } from '../context/DocumentContext';
 import { AudioPlayerModal } from './AudioPlayerModal';
+import { LanguageSelector } from './LanguageSelector';
+import { getLanguage } from '../data/languages';
 
 export const ResultsView: React.FC<{
   docId: string;
   onBack: () => void;
   onAsk: (docId: string) => void;
 }> = ({ docId, onBack, onAsk }) => {
-  const { documents } = useDocumentContext();
+  const { documents, selectedLanguage, translatingDocId, translateDocument } = useDocumentContext();
   const doc = documents.find((d) => d.id === docId);
 
   const [expandedFlagIds, setExpandedFlagIds] = useState<Record<string, boolean>>({});
@@ -123,17 +126,36 @@ export const ResultsView: React.FC<{
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white truncate px-2 text-center max-w-[220px] sm:max-w-xs">
+        <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate px-2 text-center max-w-[105px] sm:max-w-[220px]">
           {doc.title}
         </h1>
-        <button
-          onClick={handleShare}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          aria-label="Share Document"
-        >
-          <Share2 className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSelector compact />
+          <button
+            onClick={handleShare}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            aria-label="Share Document"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
+
+      {(doc.analysisLanguage || 'en-IN') !== selectedLanguage && (
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed">
+            This analysis is in another language. Translate it to <strong>{getLanguage(selectedLanguage).nativeName}</strong> without changing original clause quotations.
+          </p>
+          <button
+            onClick={() => void translateDocument(doc.id)}
+            disabled={translatingDocId === doc.id}
+            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 flex-none disabled:opacity-60"
+          >
+            {translatingDocId === doc.id && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            {translatingDocId === doc.id ? 'Translating' : 'Translate'}
+          </button>
+        </div>
+      )}
 
       {/* Top Summary Verdict Card */}
       <section className={`rounded-[20px] p-5 shadow-[0_4px_6px_rgba(0,0,0,0.05)] border ${cardBgClass}`}>
@@ -271,7 +293,7 @@ export const ResultsView: React.FC<{
           className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-full py-3.5 px-6 flex items-center justify-center gap-2 text-base font-bold shadow-md transition-all"
         >
           <HelpCircle className="w-5 h-5 fill-white text-blue-600" />
-          <span>Ask JargonBuster</span>
+          <span>Ask DocWise</span>
         </button>
 
         <button

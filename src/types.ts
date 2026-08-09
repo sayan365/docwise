@@ -1,3 +1,5 @@
+import type { LanguageCode } from './data/languages';
+
 export type RiskLevel = 'clear' | 'warning' | 'high';
 export type SeverityLevel = 'high' | 'medium' | 'low';
 export type DocCategory = 'Contracts' | 'Leases' | 'Insurance' | 'Financial';
@@ -33,6 +35,7 @@ export interface DocumentItem {
   fileName?: string;
   fileMimeType?: string;
   analysisContext?: string;
+  analysisLanguage?: LanguageCode;
   takeaways: string[];
   redFlags: RedFlag[];
   redFlagsCount: number;

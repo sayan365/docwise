@@ -8,11 +8,14 @@ import {
   Check,
   Trash2,
   HardDrive,
+  Languages,
 } from 'lucide-react';
 import { useDocumentContext } from '../context/DocumentContext';
+import { LanguageSelector } from './LanguageSelector';
+import { getLanguage } from '../data/languages';
 
 export const SettingsView: React.FC = () => {
-  const { documents, isDarkMode, toggleDarkMode, resetSampleData, clearDocuments } = useDocumentContext();
+  const { documents, isDarkMode, toggleDarkMode, resetSampleData, clearDocuments, selectedLanguage } = useDocumentContext();
   const [resetDone, setResetDone] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -75,6 +78,21 @@ export const SettingsView: React.FC = () => {
             <div className="w-5 h-5 rounded-full bg-white shadow-md" />
           </button>
         </div>
+      </section>
+
+      <section className="bg-white dark:bg-slate-800 rounded-[20px] p-5 shadow-[0_4px_6px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-700 flex flex-col gap-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Language & Voice</h2>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-none">
+            <Languages className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Explanation Language</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Results, answers, and audio use {getLanguage(selectedLanguage).nativeName}</p>
+          </div>
+        </div>
+        <LanguageSelector />
+        <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">Original clause quotations remain in the document's source language to prevent meaning from being altered.</p>
       </section>
 
       {/* Data Management */}

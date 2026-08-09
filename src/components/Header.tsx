@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowLeft, Shield, History as HistoryIcon, Moon, Sun, Share2 } from 'lucide-react';
 import { useDocumentContext } from '../context/DocumentContext';
+import { LanguageSelector } from './LanguageSelector';
 
 export const Header: React.FC<{
   title?: string;
@@ -30,8 +31,8 @@ export const Header: React.FC<{
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
               <Shield className="w-5 h-5" />
             </div>
-            <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              JargonBuster
+            <span className="max-[379px]:hidden text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+              DocWise
             </span>
           </div>
         )}
@@ -44,6 +45,7 @@ export const Header: React.FC<{
       </div>
 
       <div className="flex items-center gap-2">
+        <LanguageSelector compact />
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleDarkMode}
@@ -66,14 +68,14 @@ export const Header: React.FC<{
           <>
             <button
               onClick={() => setActiveTab('history')}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="hidden sm:flex w-9 h-9 rounded-full items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="History"
             >
               <HistoryIcon className="w-5 h-5" />
             </button>
 
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center border border-blue-200 dark:border-blue-800 shadow-xs" aria-label="JargonBuster profile">
-              <span className="text-[11px] font-extrabold tracking-tight">JB</span>
+            <div className="hidden sm:flex w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white items-center justify-center border border-blue-200 dark:border-blue-800 shadow-xs" aria-label="DocWise profile">
+              <span className="text-[11px] font-extrabold tracking-tight">DW</span>
             </div>
           </>
         )}

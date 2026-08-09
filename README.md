@@ -1,8 +1,8 @@
-# JargonBuster
+# DocWise
 
-JargonBuster turns dense contracts, leases, insurance documents, and financial terms into clear summaries. It highlights important takeaways, calls out risky clauses, supports follow-up questions, and can read a summary aloud.
+DocWise turns dense contracts, leases, insurance documents, and financial terms into clear summaries. It highlights important takeaways, calls out risky clauses, supports follow-up questions, and can read a summary aloud.
 
-> AI analysis can make mistakes. JargonBuster is an explainer, not a substitute for advice from a qualified professional.
+> AI analysis can make mistakes. DocWise is an explainer, not a substitute for advice from a qualified professional.
 
 ## Local setup
 

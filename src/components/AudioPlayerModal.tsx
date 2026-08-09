@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, Play, Pause, X, Sparkles } from 'lucide-react';
+import { useDocumentContext } from '../context/DocumentContext';
+import { getLanguage } from '../data/languages';
 
 interface AudioPlayerModalProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({
   verdict,
   takeaways,
 }) => {
+  const { selectedLanguage } = useDocumentContext();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioError, setAudioError] = useState('');
@@ -45,7 +48,7 @@ export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fullSummaryText }),
+        body: JSON.stringify({ text: fullSummaryText, outputLanguage: getLanguage(selectedLanguage) }),
       });
 
       if (res.ok) {

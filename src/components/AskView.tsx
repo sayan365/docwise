@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useDocumentContext } from '../context/DocumentContext';
+import { LanguageSelector } from './LanguageSelector';
 
 export const AskView: React.FC<{
   docId: string;
@@ -78,20 +79,15 @@ export const AskView: React.FC<{
         </button>
 
         <div className="flex flex-col items-center justify-center flex-1">
-          <h1 className="text-base font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
-            Ask JargonBuster
+          <h1 className="text-base font-bold text-slate-900 dark:text-white truncate max-w-[130px] sm:max-w-[200px]">
+            Ask DocWise
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[180px]">
+          <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px] sm:max-w-[180px]">
             {doc.title}
           </p>
         </div>
 
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-          title="Help"
-        >
-          <HelpCircle className="w-5 h-5" />
-        </button>
+        <LanguageSelector compact />
       </header>
 
       {/* Chat Messages Canvas */}
