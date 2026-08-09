@@ -1,0 +1,344 @@
+import express from "express";
+import path from "path";
+import dotenv from "dotenv";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { createServer as createViteServer } from "vite";
+
+// Vite reads .env.local automatically, but the Express process does not.
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), quiet: true });
+dotenv.config({ quiet: true });
+
+const app = express();
+const PORT = Number(process.env.PORT) || 3000;
+
+app.use(express.json({ limit: "35mb" }));
+
+function pcmToWavBase64(base64Pcm: string, sampleRate = 24000) {
+  const pcm = Buffer.from(base64Pcm, "base64");
+  const wav = Buffer.alloc(44 + pcm.length);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + pcm.length, 4);
+  wav.write("WAVE", 8);
+  wav.write("fmt ", 12);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(pcm.length, 40);
+  pcm.copy(wav, 44);
+  return wav.toString("base64");
+}
+
+// Helper to get GoogleGenAI instance safely
+function getAI() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is not set");
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+// API Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", service: "JargonBuster" });
+});
+
+// API: Analyze Document
+app.post("/api/analyze-document", async (req, res) => {
+  try {
+    const { text, fileData, mimeType, fileName } = req.body;
+
+    if (!text && !fileData) {
+      return res.status(400).json({ error: "Document text or file is required" });
+    }
+
+    const ai = getAI();
+
+    const parts: any[] = [];
+
+    if (fileData && mimeType) {
+      parts.push({
+        inlineData: {
+          data: fileData,
+          mimeType: mimeType,
+        },
+      });
+    }
+
+    const promptText = `
+Analyze the following document or document excerpt for legal, contractual, or financial jargon.
+Translate complex legal language into plain English, highlight key takeaways, and flag any potentially risky or restrictive clauses (red flags).
+
+File Name: ${fileName || "Uploaded Document"}
+${text ? `Document Text:\n"""\n${text}\n"""` : ""}
+
+Please provide a concise document title, classify into a category (Contracts, Leases, Insurance, Financial), give a clear 1-line verdict, an overall risk level ('clear', 'warning', or 'high'), a list of 3-5 plain-English key takeaways, and a list of red flags with titles, plain-English explanations, severity ('high', 'medium', or 'low'), and the exact or approximate source clause snippet from the document.
+`;
+
+    parts.push({ text: promptText });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: { parts },
+      config: {
+        systemInstruction:
+          "You are a plain-English legal and contract explainer called JargonBuster. Given raw document text or uploaded document files, analyze the document and return strict JSON with a title, category, verdict, overallRisk, takeaways array, and redFlags array. Never include extra prose outside the JSON.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: {
+              type: Type.STRING,
+              description: "A clear, concise title for the document.",
+            },
+            category: {
+              type: Type.STRING,
+              description: "Category of document: Contracts, Leases, Insurance, or Financial.",
+            },
+            verdict: {
+              type: Type.STRING,
+              description: "A 1-2 sentence plain-English verdict on the overall document safety.",
+            },
+            overallRisk: {
+              type: Type.STRING,
+              description: "Overall risk level: 'clear', 'warning', or 'high'.",
+            },
+            takeaways: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "List of 3-5 plain-English key takeaway bullet points.",
+            },
+            redFlags: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: {
+                    type: Type.STRING,
+                    description: "Short bold title for the red flag clause.",
+                  },
+                  explanation: {
+                    type: Type.STRING,
+                    description: "One-line plain-English explanation of why this clause poses a risk.",
+                  },
+                  severity: {
+                    type: Type.STRING,
+                    description: "Severity level: 'high', 'medium', or 'low'.",
+                  },
+                  sourceClause: {
+                    type: Type.STRING,
+                    description: "The original legal clause text snippet from the document.",
+                  },
+                },
+                required: ["title", "explanation", "severity", "sourceClause"],
+              },
+              description: "List of red flag clauses found in the document.",
+            },
+            documentContext: {
+              type: Type.STRING,
+              description: "A detailed, faithful plain-text outline of the document's parties, obligations, dates, amounts, definitions, restrictions, and important clauses for later follow-up questions.",
+            },
+          },
+          required: ["title", "category", "verdict", "overallRisk", "takeaways", "redFlags", "documentContext"],
+        },
+      },
+    });
+
+    const jsonText = response.text ? response.text.trim() : "";
+    let analysis;
+    try {
+      analysis = JSON.parse(jsonText);
+    } catch (e) {
+      console.error("Failed to parse Gemini JSON output:", jsonText);
+      return res.status(500).json({ error: "Failed to parse analysis response from AI." });
+    }
+
+    return res.json({ success: true, data: analysis });
+  } catch (error: any) {
+    console.error("Error analyzing document:", error);
+    return res.status(500).json({
+      error: error.message || "An error occurred while analyzing the document.",
+    });
+  }
+});
+
+// API: Ask Questions about Document
+app.post("/api/ask-document", async (req, res) => {
+  try {
+    const {
+      documentTitle,
+      documentText,
+      documentFileData,
+      documentMimeType,
+      documentAnalysis,
+      question,
+      conversationHistory,
+    } = req.body;
+
+    if (!question) {
+      return res.status(400).json({ error: "Question is required" });
+    }
+
+    const ai = getAI();
+
+    const historyPrompt = Array.isArray(conversationHistory)
+      ? conversationHistory
+          .map((m: any, index: number) =>
+            `[Message ${index + 1} — ${m.role === "user" ? "User" : "JargonBuster"}]\n${m.text}`
+          )
+          .join("\n")
+      : "";
+
+    const promptText = `You are answering a follow-up question about one specific document.
+
+DOCUMENT TITLE
+${documentTitle || "Document"}
+
+SAVED ANALYSIS
+${documentAnalysis ? JSON.stringify(documentAnalysis, null, 2) : "No saved analysis available."}
+
+${documentText ? `EXTRACTED DOCUMENT TEXT\n---\n${documentText}\n---\n` : "The original uploaded file is attached to this request. Read it directly before answering.\n"}
+FULL CONVERSATION HISTORY (oldest to newest)
+${historyPrompt || "No previous messages."}
+
+CURRENT USER QUESTION
+${question}
+
+Answer the current question in plain English using the original document, saved analysis, and all relevant prior messages. Resolve references such as “it”, “that clause”, and “the previous point” from the conversation history. Do not claim the document is missing when an original file is attached. Never treat placeholder text such as “Document file scanned” as document content. If the document truly does not contain the answer, say exactly what is absent.
+Return a structured JSON object containing:
+- "answer": plain English response explaining the answer clearly.
+- "highlightChips": string array of 1-3 short key highlights or warnings (e.g. ["Requires 60-day notice", "Penalty applies"]).
+- "sourceQuote": optional original clause snippet quoted from the document if relevant.
+`;
+
+    const parts: any[] = [];
+    if (documentFileData && documentMimeType) {
+      parts.push({ inlineData: { data: documentFileData, mimeType: documentMimeType } });
+    }
+    parts.push({ text: promptText });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: { parts },
+      config: {
+        systemInstruction:
+          "You are JargonBuster, a careful document explainer. Maintain continuity across the complete supplied conversation and ground every factual claim in the supplied document or saved analysis. Return strict JSON with answer, highlightChips array, and optional sourceQuote.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            answer: {
+              type: Type.STRING,
+              description: "Clear plain-English answer to the user's question.",
+            },
+            highlightChips: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Short key highlight or warning pills.",
+            },
+            sourceQuote: {
+              type: Type.STRING,
+              description: "Optional original clause snippet quoted from the text.",
+            },
+          },
+          required: ["answer", "highlightChips"],
+        },
+      },
+    });
+
+    const jsonText = response.text ? response.text.trim() : "";
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch {
+      data = {
+        answer: response.text || "Here is what I found regarding your question.",
+        highlightChips: [],
+      };
+    }
+
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    console.error("Error asking document:", error);
+    return res.status(500).json({
+      error: error.message || "An error occurred while getting an answer.",
+    });
+  }
+});
+
+// API: Text-to-Speech audio walkthrough
+app.post("/api/tts", async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ error: "Text is required for TTS" });
+    }
+
+    const ai = getAI();
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: `Explain clearly in a warm, professional voice: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: "Kore" },
+          },
+        },
+      },
+    });
+
+    const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    const base64Audio = audioData?.data;
+    if (base64Audio) {
+      const isRawPcm = audioData?.mimeType?.toLowerCase().includes("l16");
+      return res.json({
+        success: true,
+        audioBase64: isRawPcm ? pcmToWavBase64(base64Audio) : base64Audio,
+        mimeType: isRawPcm ? "audio/wav" : audioData?.mimeType || "audio/wav",
+      });
+    } else {
+      return res.status(500).json({ error: "Audio generation returned empty result" });
+    }
+  } catch (error: any) {
+    console.error("Error generating TTS:", error);
+    return res.status(500).json({ error: error.message || "Failed to generate audio walkthrough" });
+  }
+});
+
+// Start Express + Vite
+async function start() {
+  const isProduction =
+    process.env.NODE_ENV === "production" || path.extname(process.argv[1] || "") === ".cjs";
+
+  if (!isProduction) {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`JargonBuster server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+start();
