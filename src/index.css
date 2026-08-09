@@ -1,21 +1,107 @@
 @import "tailwindcss";
 
 :root {
+  --card: #ffffff;
+  --input: #ffffff;
+  --muted: #eef2ef;
+  --accent: #f59e0b;
+  --border: #dfe7e2;
+  --primary: #16825d;
+  --primary-hover: #116b4d;
+  --sidebar: #ffffff;
+  --background: #f6f8f7;
+  --foreground: #17221c;
+  --muted-foreground: #64736a;
+  --primary-foreground: #ffffff;
+  --sidebar-foreground: #17221c;
+  --font-sans-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono-family: "SFMono-Regular", Consolas, monospace;
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f8fafc;
 }
 
-:root.dark { color-scheme: dark; background: #0f172a; }
+:root.dark {
+  --card: #15221b;
+  --input: #111c16;
+  --muted: #1d2d24;
+  --accent: #fbbf24;
+  --border: #2a3c31;
+  --primary: #42cf96;
+  --primary-hover: #63dda9;
+  --sidebar: #101a14;
+  --background: #0b120e;
+  --foreground: #edf6f0;
+  --muted-foreground: #9aada1;
+  --primary-foreground: #062317;
+  --sidebar-foreground: #edf6f0;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-card: var(--card);
+  --color-input: var(--input);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-sidebar: var(--sidebar);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --font-sans: var(--font-sans-family);
+  --font-mono: var(--font-mono-family);
+}
+
 html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, input, textarea { font: inherit; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans-family);
+  letter-spacing: -0.005em;
+}
+
+button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
-::selection { background: #bfdbfe; color: #172554; }
-*:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.35); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+*:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Map the existing interface utilities to the DocWise palette. */
+.bg-white { background-color: var(--card) !important; }
+.bg-slate-50, .bg-\[\#F8FAFC\] { background-color: var(--background) !important; }
+.bg-slate-100, .bg-slate-200 { background-color: var(--muted) !important; }
+.bg-blue-600 { background-color: var(--primary) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--primary-hover) !important; }
+.bg-blue-50, .bg-blue-100 { background-color: color-mix(in srgb, var(--primary) 10%, var(--card)) !important; }
+.text-blue-600, .text-blue-700 { color: var(--primary) !important; }
+.border-blue-200 { border-color: color-mix(in srgb, var(--primary) 25%, var(--border)) !important; }
+.border-blue-600 { border-color: var(--primary) !important; }
+.text-slate-900, .text-slate-800, .text-slate-700 { color: var(--foreground) !important; }
+.text-slate-500, .text-slate-400 { color: var(--muted-foreground) !important; }
+.border-slate-100, .border-slate-200, .border-slate-300 { border-color: var(--border) !important; }
+
+.dark .dark\:bg-slate-950, .dark .dark\:bg-slate-900 { background-color: var(--background) !important; }
+.dark .dark\:bg-slate-800, .dark .dark\:bg-slate-800\/90 { background-color: var(--card) !important; }
+.dark .dark\:bg-slate-700, .dark .dark\:bg-slate-700\/60 { background-color: var(--muted) !important; }
+.dark .dark\:text-white, .dark .dark\:text-slate-100, .dark .dark\:text-slate-200 { color: var(--foreground) !important; }
+.dark .dark\:text-slate-300, .dark .dark\:text-slate-400 { color: var(--muted-foreground) !important; }
+.dark .dark\:border-slate-700, .dark .dark\:border-slate-800 { border-color: var(--border) !important; }
+.dark .dark\:text-blue-400 { color: var(--primary) !important; }
+.dark .dark\:bg-blue-950\/80, .dark .dark\:bg-blue-900\/40 { background-color: color-mix(in srgb, var(--primary) 12%, var(--card)) !important; }
+
+/* Consistent, quiet elevation for primary content surfaces. */
+main section, [role="dialog"] > div {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04) !important;
+}
+
+button, input, textarea, select { transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+button:active:not(:disabled) { transform: scale(0.98); }
 
 @keyframes shimmer {
   0% { transform: translateX(-100%); }

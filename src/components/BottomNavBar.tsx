@@ -14,7 +14,7 @@ export const BottomNavBar: React.FC = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg rounded-t-2xl px-4 py-2 flex justify-around items-center transition-colors">
+    <nav className="fixed bottom-0 left-0 w-full z-40 bg-card/90 backdrop-blur-xl border-t border-border shadow-[0_-8px_24px_rgba(15,23,42,0.05)] px-4 py-2 flex justify-around items-center transition-colors">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
@@ -23,14 +23,14 @@ export const BottomNavBar: React.FC = () => {
             onClick={() => setActiveTab(tab.id)}
             className={`flex flex-col items-center justify-center py-1 px-3 min-w-[64px] rounded-xl transition-all ${
               isActive
-                ? 'text-blue-600 dark:text-blue-400 font-semibold scale-105'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 opacity-80 hover:opacity-100'
+                ? 'text-primary font-semibold bg-primary/10'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
             }`}
           >
             <div className="relative flex items-center justify-center">
               {tab.icon}
               {isActive && (
-                <span className="absolute -bottom-1 w-1.5 h-1.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                <span className="absolute -bottom-1 w-1.5 h-1.5 bg-primary rounded-full" />
               )}
             </div>
             <span className="text-xs mt-1.5 font-medium">{tab.label}</span>

@@ -46,7 +46,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 font-sans transition-colors flex flex-col antialiased">
+    <div className="min-h-screen bg-background text-foreground font-sans transition-colors flex flex-col antialiased">
       {/* View routing */}
       {currentScreen === 'results' && selectedDocId ? (
         <ResultsView

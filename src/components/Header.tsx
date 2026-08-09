@@ -13,7 +13,7 @@ export const Header: React.FC<{
   const { isDarkMode, toggleDarkMode, setActiveTab } = useDocumentContext();
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center w-full px-5 h-16 sticky top-0 z-40 transition-colors shadow-xs">
+    <header className="bg-card/90 backdrop-blur-xl text-foreground border-b border-border flex justify-between items-center w-full px-5 h-16 sticky top-0 z-40 transition-colors">
       <div className="flex items-center gap-2">
         {showBack ? (
           <button
@@ -28,10 +28,10 @@ export const Header: React.FC<{
             onClick={() => setActiveTab('scan')}
             className="flex items-center gap-2 cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
               <Shield className="w-5 h-5" />
             </div>
-            <span className="max-[379px]:hidden text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <span className="max-[379px]:hidden text-xl font-bold text-foreground tracking-tight">
               DocWise
             </span>
           </div>
