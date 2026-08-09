@@ -21,4 +21,15 @@ Requirements: Node.js 20 or newer and a Gemini API key.
 - `npm start` — run the production bundle
 - `npm run clean` — remove generated build files
 
+## Deploying to Vercel
+
+The repository includes a Vite frontend configuration and a catch-all Vercel Function for `/api/*`.
+
+1. Import the repository into Vercel.
+2. Add `GEMINI_API_KEY` under **Project Settings → Environment Variables** for Production and Preview.
+3. Redeploy after saving the environment variable.
+4. Visit `/api/health` on the deployment and confirm `"aiConfigured": true`.
+
+Vercel Functions limit request bodies to 4.5 MB. Small PDFs and images work directly; larger document support requires direct file storage/upload rather than Base64 through the function.
+
 Uploaded content, analyses, and conversations are cached locally in the browser with IndexedDB so History, Insights, and document Q&A survive refreshes. They are not written to an application database. Use **Settings → Clear Document History** to remove the local cache, and configure your deployment and AI provider retention policies appropriately before using sensitive documents.

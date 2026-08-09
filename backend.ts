@@ -66,7 +66,11 @@ function getAI() {
 
 // API Health Check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "DocWise" });
+  res.json({
+    status: "ok",
+    service: "DocWise",
+    aiConfigured: Boolean(process.env.GEMINI_API_KEY),
+  });
 });
 
 // API: Analyze Document
@@ -423,4 +427,8 @@ async function start() {
   });
 }
 
-start();
+if (!process.env.VERCEL) {
+  void start();
+}
+
+export default app;
