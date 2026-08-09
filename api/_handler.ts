@@ -1,6 +1,6 @@
 export async function handleApiRequest(request: any, response: any) {
   try {
-    const { default: app } = await import('./_backend');
+    const { default: app } = await import('./_backend.js');
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const finish = () => {
